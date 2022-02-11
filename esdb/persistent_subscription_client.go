@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/EventStore/EventStore-Client-Go/protos/persistent"
+	"github.com/EventStore/EventStore-Client-Go/protos/shared"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -216,6 +218,232 @@ func (client *persistentClient) DeleteAllSubscription(ctx context.Context, handl
 	}
 
 	return nil
+}
+
+func (client *persistentClient) listPersistentSubscriptions(ctx context.Context, handle connectionHandle, streamName *string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+	listOptions := &persistent.ListReq_Options{}
+
+	if streamName == nil {
+		listOptions.ListOption = &persistent.ListReq_Options_ListAllSubscriptions{
+			ListAllSubscriptions: &shared.Empty{},
+		}
+	} else if *streamName == "$all" {
+		listOptions.ListOption = &persistent.ListReq_Options_ListForStream{
+			ListForStream: &persistent.ListReq_StreamOption{
+				StreamOption: &persistent.ListReq_StreamOption_All{
+					All: &shared.Empty{},
+				},
+			},
+		}
+	} else {
+		listOptions.ListOption = &persistent.ListReq_Options_ListForStream{
+			ListForStream: &persistent.ListReq_StreamOption{
+				StreamOption: &persistent.ListReq_StreamOption_Stream{
+					Stream: &shared.StreamIdentifier{StreamName: []byte(*streamName)},
+				},
+			},
+		}
+	}
+
+	listReq := &persistent.ListReq{
+		Options: listOptions,
+	}
+
+	var headers, trailers metadata.MD
+	callOptions := []grpc.CallOption{grpc.Header(&headers), grpc.Trailer(&trailers)}
+	if options.Authenticated != nil {
+		callOptions = append(callOptions, grpc.PerRPCCredentials(basicAuth{
+			username: options.Authenticated.Login,
+			password: options.Authenticated.Password,
+		}))
+	}
+
+	resp, err := client.persistentSubscriptionClient.List(ctx, listReq, callOptions...)
+
+	if err != nil {
+		return nil, client.inner.handleError(handle, headers, trailers, err)
+	}
+
+	var infos []PersistentSubscriptionInfo
+	for _, wire := range resp.GetSubscriptions() {
+		info, err := subscriptionInfoFromWire(wire)
+
+		if err != nil {
+			return nil, err
+		}
+
+		infos = append(infos, *info)
+	}
+
+	return infos, nil
+}
+
+func (client *persistentClient) getPersistentSubscriptionInfo(ctx context.Context, handle connectionHandle, streamName *string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfo, error) {
+	getInfoOptions := &persistent.GetInfoReq_Options{}
+
+	if streamName == nil {
+		getInfoOptions.StreamOption = &persistent.GetInfoReq_Options_All{All: &shared.Empty{}}
+	} else {
+		getInfoOptions.StreamOption = &persistent.GetInfoReq_Options_StreamIdentifier{
+			StreamIdentifier: &shared.StreamIdentifier{StreamName: []byte(*streamName)},
+		}
+	}
+
+	getInfoOptions.GroupName = groupName
+
+	getInfoReq := &persistent.GetInfoReq{Options: getInfoOptions}
+
+	var headers, trailers metadata.MD
+	callOptions := []grpc.CallOption{grpc.Header(&headers), grpc.Trailer(&trailers)}
+	if options.Authenticated != nil {
+		callOptions = append(callOptions, grpc.PerRPCCredentials(basicAuth{
+			username: options.Authenticated.Login,
+			password: options.Authenticated.Password,
+		}))
+	}
+
+	resp, err := client.persistentSubscriptionClient.GetInfo(ctx, getInfoReq, callOptions...)
+	if err != nil {
+		return nil, client.inner.handleError(handle, headers, trailers, err)
+	}
+
+	info, err := subscriptionInfoFromWire(resp.SubscriptionInfo)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+func (client *persistentClient) replayParkedMessages(ctx context.Context, handle connectionHandle, streamName *string, options ReplayParkedMessagesOptions) error {
+	replayOptions := &persistent.ReplayParkedReq_Options{}
+
+	if streamName == nil {
+		replayOptions.StreamOption = &persistent.ReplayParkedReq_Options_All{All: &shared.Empty{}}
+	} else {
+		replayOptions.StreamOption = &persistent.ReplayParkedReq_Options_StreamIdentifier{
+			StreamIdentifier: &shared.StreamIdentifier{
+				StreamName: []byte(*streamName),
+			},
+		}
+	}
+
+	if options.StopAt == 0 {
+		replayOptions.StopAtOption = &persistent.ReplayParkedReq_Options_NoLimit{NoLimit: &shared.Empty{}}
+	} else {
+		replayOptions.StopAtOption = &persistent.ReplayParkedReq_Options_StopAt{StopAt: int64(options.StopAt)}
+	}
+
+	replayReq := &persistent.ReplayParkedReq{Options: replayOptions}
+
+	var headers, trailers metadata.MD
+	callOptions := []grpc.CallOption{grpc.Header(&headers), grpc.Trailer(&trailers)}
+	if options.Authenticated != nil {
+		callOptions = append(callOptions, grpc.PerRPCCredentials(basicAuth{
+			username: options.Authenticated.Login,
+			password: options.Authenticated.Password,
+		}))
+	}
+	_, err := client.persistentSubscriptionClient.ReplayParked(ctx, replayReq, callOptions...)
+
+	if err != nil {
+		return client.inner.handleError(handle, headers, trailers, err)
+	}
+
+	return nil
+}
+
+func subscriptionInfoFromWire(wire *persistent.SubscriptionInfo) (*PersistentSubscriptionInfo, error) {
+	lastKnownEventNumber, err := strconv.Atoi(wire.LastKnownEventPosition)
+
+	if err != nil {
+		return nil, &Error{
+			code: ErrorParsing,
+			err:  fmt.Errorf("error when parsing LastKnownEventPosition"),
+		}
+	}
+
+	lastProcessedEventNumber, err := strconv.Atoi(wire.LastCheckpointedEventPosition)
+
+	if err != nil {
+		return nil, &Error{
+			code: ErrorParsing,
+			err:  fmt.Errorf("error when parsing LastCheckpointedEventPosition"),
+		}
+	}
+
+	startFrom, err := strconv.Atoi(wire.StartFrom)
+
+	if err != nil {
+		return nil, &Error{
+			code: ErrorParsing,
+			err:  fmt.Errorf("error when parsing StartFrom"),
+		}
+	}
+
+	config := PersistentSubscriptionConfig{
+		ResolveLinkTos:       wire.ResolveLinkTos,
+		StartFrom:            int64(startFrom),
+		MessageTimeout:       int64(wire.MessageTimeoutMilliseconds),
+		ExtraStatistics:      wire.ExtraStatistics,
+		MaxRetryCount:        int64(wire.MaxRetryCount),
+		LiveBufferSize:       int64(wire.LiveBufferSize),
+		BufferSize:           int64(wire.BufferSize),
+		ReadBatchSize:        int64(wire.ReadBatchSize),
+		PreferRoundRobin:     wire.NamedConsumerStrategy == "RoundRobin",
+		CheckpointAfter:      int64(wire.CheckPointAfterMilliseconds),
+		CheckpointLowerBound: int64(wire.MinCheckPointCount),
+		CheckpointUpperBound: int64(wire.MaxCheckPointCount),
+		MaxSubscriberCount:   int64(wire.MaxSubscriberCount),
+		ConsumerStrategyName: wire.NamedConsumerStrategy,
+	}
+
+	var connections []PersistentSubscriptionConnectionInfo
+	for _, connWire := range wire.Connections {
+		var stats []PersistentSubscriptionMeasurement
+		for _, statsWire := range connWire.ObservedMeasurements {
+			stats = append(stats, PersistentSubscriptionMeasurement{
+				Key:   statsWire.Key,
+				Value: statsWire.Value,
+			})
+		}
+
+		conn := PersistentSubscriptionConnectionInfo{
+			From:                      connWire.From,
+			Username:                  connWire.Username,
+			AverageItemsPerSecond:     float64(connWire.AverageItemsPerSecond),
+			TotalItemsProcessed:       connWire.TotalItems,
+			CountSinceLastMeasurement: connWire.CountSinceLastMeasurement,
+			AvailableSlots:            int64(connWire.AvailableSlots),
+			InFlightMessages:          int64(connWire.InFlightMessages),
+			ConnectionName:            connWire.ConnectionName,
+			ExtraStatistics:           stats,
+		}
+
+		connections = append(connections, conn)
+	}
+
+	info := PersistentSubscriptionInfo{
+		EventStreamId:            wire.EventSource,
+		GroupName:                wire.GroupName,
+		Status:                   wire.Status,
+		AverageItemsPerSecond:    float64(wire.AveragePerSecond),
+		TotalItemsProcessed:      wire.TotalItems,
+		LastProcessedEventNumber: int64(lastProcessedEventNumber),
+		LastKnownEventNumber:     int64(lastKnownEventNumber),
+		ConnectionCount:          int64(len(wire.Connections)),
+		TotalInFlightMessages:    int64(wire.TotalInFlightMessages),
+		Config:                   &config,
+		Connections:              connections,
+		ReadBufferCount:          int64(wire.ReadBufferCount),
+		RetryBufferCount:         int64(wire.RetryBufferCount),
+		LiveBufferCount:          wire.LiveBufferCount,
+		OutstandingMessagesCount: int64(wire.OutstandingMessagesCount),
+		ParkedMessageCount:       wire.ParkedMessageCount,
+	}
+
+	return &info, nil
 }
 
 func newPersistentClient(inner *grpcClient, client persistent.PersistentSubscriptionsClient) persistentClient {

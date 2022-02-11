@@ -486,16 +486,22 @@ const (
 )
 
 type PersistentSubscriptionInfo struct {
-	EventStreamId            string                        `json:"eventStreamId"`
-	GroupName                string                        `json:"groupName"`
-	Status                   PersistentSubscriptionStatus  `json:"status"`
-	AverageItemsPerSecond    float64                       `json:"averageItemsPerSecond"`
-	TotalItemsProcessed      int64                         `json:"totalItemsProcessed"`
-	LastProcessedEventNumber int64                         `json:"lastProcessedEventNumber"`
-	LastKnownEventNumber     int64                         `json:"lastKnownEventNumber"`
-	ConnectionCount          int64                         `json:"connectionCount,omitempty"`
-	TotalInFlightMessages    int64                         `json:"totalInFlightMessages"`
-	Config                   *PersistentSubscriptionConfig `json:"config,omitempty"`
+	EventStreamId            string                                 `json:"eventStreamId"`
+	GroupName                string                                 `json:"groupName"`
+	Status                   string                                 `json:"status"`
+	AverageItemsPerSecond    float64                                `json:"averageItemsPerSecond"`
+	TotalItemsProcessed      int64                                  `json:"totalItemsProcessed"`
+	LastProcessedEventNumber int64                                  `json:"lastProcessedEventNumber"`
+	LastKnownEventNumber     int64                                  `json:"lastKnownEventNumber"`
+	ConnectionCount          int64                                  `json:"connectionCount,omitempty"`
+	TotalInFlightMessages    int64                                  `json:"totalInFlightMessages"`
+	Config                   *PersistentSubscriptionConfig          `json:"config,omitempty"`
+	Connections              []PersistentSubscriptionConnectionInfo `json:"connections,omitempty"`
+	ReadBufferCount          int64                                  `json:"readBufferCount"`
+	RetryBufferCount         int64                                  `json:"retryBufferCount"`
+	LiveBufferCount          int64                                  `json:"liveBufferCount"`
+	OutstandingMessagesCount int64                                  `json:"OutstandingMessagesCount"`
+	ParkedMessageCount       int64                                  `json:"parkedMessageCount"`
 }
 
 type PersistentSubscriptionConfig struct {
@@ -513,4 +519,21 @@ type PersistentSubscriptionConfig struct {
 	CheckpointUpperBound int64  `json:"maxCheckPointCount"`
 	MaxSubscriberCount   int64  `json:"maxSubscriberCount"`
 	ConsumerStrategyName string `json:"consumerStrategyName"`
+}
+
+type PersistentSubscriptionConnectionInfo struct {
+	From                      string                              `json:"from"`
+	Username                  string                              `json:"username"`
+	AverageItemsPerSecond     float64                             `json:"averageItemsPerSecond"`
+	TotalItemsProcessed       int64                               `json:"totalItemsProcessed"`
+	CountSinceLastMeasurement int64                               `json:"countSinceLastMeasurement"`
+	AvailableSlots            int64                               `json:"availableSlots"`
+	InFlightMessages          int64                               `json:"inFlightMessages"`
+	ConnectionName            string                              `json:"connectionName"`
+	ExtraStatistics           []PersistentSubscriptionMeasurement `json:"extraStatistics"`
+}
+
+type PersistentSubscriptionMeasurement struct {
+	Key   string `json:"key"`
+	Value int64  `json:"value"`
 }
