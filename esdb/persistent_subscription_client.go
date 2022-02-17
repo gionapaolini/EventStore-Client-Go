@@ -220,7 +220,7 @@ func (client *persistentClient) DeleteAllSubscription(ctx context.Context, handl
 	return nil
 }
 
-func (client *persistentClient) listPersistentSubscriptions(ctx context.Context, handle connectionHandle, streamName *string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+func (client *persistentClient) listPersistentSubscriptions(ctx context.Context, handle connectionHandle, streamName *string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfoHttpJson, error) {
 	listOptions := &persistent.ListReq_Options{}
 
 	if streamName == nil {
@@ -264,7 +264,7 @@ func (client *persistentClient) listPersistentSubscriptions(ctx context.Context,
 		return nil, client.inner.handleError(handle, headers, trailers, err)
 	}
 
-	var infos []PersistentSubscriptionInfo
+	var infos []PersistentSubscriptionInfoHttpJson
 	for _, wire := range resp.GetSubscriptions() {
 		info, err := subscriptionInfoFromWire(wire)
 
@@ -278,7 +278,7 @@ func (client *persistentClient) listPersistentSubscriptions(ctx context.Context,
 	return infos, nil
 }
 
-func (client *persistentClient) getPersistentSubscriptionInfo(ctx context.Context, handle connectionHandle, streamName *string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfo, error) {
+func (client *persistentClient) getPersistentSubscriptionInfo(ctx context.Context, handle connectionHandle, streamName *string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfoHttpJson, error) {
 	getInfoOptions := &persistent.GetInfoReq_Options{}
 
 	if streamName == nil {
@@ -354,7 +354,7 @@ func (client *persistentClient) replayParkedMessages(ctx context.Context, handle
 	return nil
 }
 
-func subscriptionInfoFromWire(wire *persistent.SubscriptionInfo) (*PersistentSubscriptionInfo, error) {
+func subscriptionInfoFromWire(wire *persistent.SubscriptionInfo) (*PersistentSubscriptionInfoHttpJson, error) {
 	lastKnownEventNumber, err := strconv.Atoi(wire.LastKnownEventPosition)
 
 	if err != nil {
@@ -424,7 +424,7 @@ func subscriptionInfoFromWire(wire *persistent.SubscriptionInfo) (*PersistentSub
 		connections = append(connections, conn)
 	}
 
-	info := PersistentSubscriptionInfo{
+	info := PersistentSubscriptionInfoHttpJson{
 		EventStreamId:            wire.EventSource,
 		GroupName:                wire.GroupName,
 		Status:                   wire.Status,

@@ -15,7 +15,7 @@ func (client *Client) httpListAllPersistentSubscriptions(options ListPersistentS
 		return nil, err
 	}
 
-	var subs []PersistentSubscriptionInfo
+	var subs []PersistentSubscriptionInfoHttpJson
 
 	err = json.Unmarshal(body, &subs)
 
@@ -23,7 +23,18 @@ func (client *Client) httpListAllPersistentSubscriptions(options ListPersistentS
 		return nil, &Error{code: ErrorParsing, err: fmt.Errorf("error when parsing JSON payload: %w", err)}
 	}
 
-	return subs, nil
+	var infos []PersistentSubscriptionInfo
+
+	for _, src := range subs {
+		info, err := fromHttpJsonInfo(src)
+		if err != nil {
+			return nil, err
+		}
+
+		infos = append(infos, info)
+	}
+
+	return infos, nil
 }
 
 func (client *Client) httpListPersistentSubscriptionsForStream(streamName string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
@@ -33,7 +44,7 @@ func (client *Client) httpListPersistentSubscriptionsForStream(streamName string
 		return nil, err
 	}
 
-	var subs []PersistentSubscriptionInfo
+	var subs []PersistentSubscriptionInfoHttpJson
 
 	err = json.Unmarshal(body, &subs)
 
@@ -41,7 +52,18 @@ func (client *Client) httpListPersistentSubscriptionsForStream(streamName string
 		return nil, &Error{code: ErrorParsing, err: fmt.Errorf("error when parsing JSON payload: %w", err)}
 	}
 
-	return subs, nil
+	var infos []PersistentSubscriptionInfo
+
+	for _, src := range subs {
+		info, err := fromHttpJsonInfo(src)
+		if err != nil {
+			return nil, err
+		}
+
+		infos = append(infos, info)
+	}
+
+	return infos, nil
 }
 
 func (client *Client) httpGetPersistentSubscriptionInfo(streamName string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfo, error) {
@@ -51,12 +73,18 @@ func (client *Client) httpGetPersistentSubscriptionInfo(streamName string, group
 		return nil, err
 	}
 
-	var info PersistentSubscriptionInfo
+	var src PersistentSubscriptionInfoHttpJson
 
-	err = json.Unmarshal(body, &info)
+	err = json.Unmarshal(body, &src)
 
 	if err != nil {
 		return nil, &Error{code: ErrorParsing, err: fmt.Errorf("error when parsing JSON payload: %w", err)}
+	}
+
+	info, err := fromHttpJsonInfo(src)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &info, nil
@@ -68,7 +96,7 @@ func (client *Client) httpReplayParkedMessages(streamName string, groupName stri
 	}
 
 	if options.StopAt != 0 {
-		params.queries = append(params.queries, newKV("stop_at", strconv.Itoa(options.StopAt)))
+		params.queries = append(params.queries, newKV("stopAt", strconv.Itoa(options.StopAt)))
 	}
 
 	url := fmt.Sprintf("/subscriptions/%s/%s/replayParked", streamName, groupName)
@@ -187,4 +215,63 @@ func (client *Client) httpExecute(method string, path string, auth *Credentials,
 	}
 
 	return body, nil
+}
+
+func fromHttpJsonInfo(src PersistentSubscriptionInfoHttpJson) (PersistentSubscriptionInfo, error) {
+	var settings *SubscriptionSettings
+	var stats *PersistentSubscriptionStats
+	info := PersistentSubscriptionInfo{}
+
+	if src.Config != nil {
+		settings = &SubscriptionSettings{}
+		settings.ResolveLinkTos = src.Config.ResolveLinkTos
+		settings.ExtraStatistics = src.Config.ExtraStatistics
+		settings.MessageTimeout = int32(src.Config.MessageTimeout)
+		settings.MaxRetryCount = int32(src.Config.MaxRetryCount)
+		settings.LiveBufferSize = int32(src.Config.LiveBufferSize)
+		settings.ReadBatchSize = int32(src.Config.ReadBatchSize)
+		settings.CheckpointAfter = int32(src.Config.CheckpointAfter)
+		settings.CheckpointLowerBound = int32(src.Config.CheckpointLowerBound)
+		settings.CheckpointUpperBound = int32(src.Config.CheckpointUpperBound)
+		settings.MaxSubscriberCount = int32(src.Config.MaxSubscriberCount)
+		settings.ConsumerStrategyName = ConsumerStrategy(src.Config.ConsumerStrategyName)
+
+		if src.EventStreamId == "$all" {
+			settings.StartFrom = src.Config.StartPosition
+		} else {
+			settings.StartFrom = src.Config.StartFrom
+		}
+
+		info.Settings = settings
+	}
+
+	if src.Config.ExtraStatistics {
+		stats = &PersistentSubscriptionStats{}
+		stats.AveragePerSecond = int64(src.AverageItemsPerSecond)
+		stats.TotalItems = src.TotalItemsProcessed
+		stats.CountSinceLastMeasurement = src.CountSinceLastMeasurement
+		stats.ReadBufferCount = src.ReadBufferCount
+		stats.LiveBufferCount = src.LiveBufferCount
+		stats.RetryBufferCount = src.RetryBufferCount
+		stats.TotalInFlightMessages = src.TotalInFlightMessages
+		stats.OutstandingMessagesCount = src.OutstandingMessagesCount
+		stats.ParkedMessagesCount = src.ParkedMessageCount
+
+		if src.EventStreamId == "$all" {
+			if src.LastCheckpointedEventPosition != "" {
+				stats.LastKnownEventRevision = src.LastKnownEventPosition
+			}
+		} else {
+			stats.LastCheckpointedEventRevision = src.LastKnownEventNumber
+		}
+
+		info.Stats = stats
+	}
+
+	info.EventSource = src.EventStreamId
+	info.GroupName = src.GroupName
+	info.Status = src.Status
+	info.Connections = src.Connections
+
+	return info, nil
 }

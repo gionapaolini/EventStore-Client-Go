@@ -8,16 +8,24 @@ import (
 
 const SUBSCRIBER_COUNT_UNLIMITED = 0
 
-type ConsumerStrategy int32
+type ConsumerStrategy string
+
+//const (
+//	ConsumerStrategy_RoundRobin          ConsumerStrategy = 0
+//	ConsumerStrategy_DispatchToSingle    ConsumerStrategy = 1
+//	ConsumerStrategy_Pinned              ConsumerStrategy = 2
+//	ConsumerStrategy_PinnedByCorrelation ConsumerStrategy = 3
+//)
 
 const (
-	ConsumerStrategy_RoundRobin          ConsumerStrategy = 0
-	ConsumerStrategy_DispatchToSingle    ConsumerStrategy = 1
-	ConsumerStrategy_Pinned              ConsumerStrategy = 2
-	ConsumerStrategy_PinnedByCorrelation ConsumerStrategy = 3
+	ConsumerStrategy_RoundRobin          ConsumerStrategy = "RoundRobin"
+	ConsumerStrategy_DispatchToSingle    ConsumerStrategy = "DispatchToSingle"
+	ConsumerStrategy_Pinned              ConsumerStrategy = "Pinned"
+	ConsumerStrategy_PinnedByCorrelation ConsumerStrategy = "PinnedByCorrelation"
 )
 
 type SubscriptionSettings struct {
+	StartFrom            interface{}
 	ResolveLinkTos       bool
 	ExtraStatistics      bool
 	MaxRetryCount        int32
@@ -485,28 +493,55 @@ const (
 	PersistentSubscriptionStatus_Live                    = "Live"
 )
 
+type PersistentSubscriptionInfoHttpJson struct {
+	EventStreamId                 string                                 `json:"eventStreamId"`
+	GroupName                     string                                 `json:"groupName"`
+	Status                        string                                 `json:"status"`
+	AverageItemsPerSecond         float64                                `json:"averageItemsPerSecond"`
+	TotalItemsProcessed           int64                                  `json:"totalItemsProcessed"`
+	LastProcessedEventNumber      int64                                  `json:"lastProcessedEventNumber"`
+	LastKnownEventNumber          int64                                  `json:"lastKnownEventNumber"`
+	LastCheckpointedEventPosition string                                 `json:"lastCheckpointedEventPosition,omitempty"`
+	LastKnownEventPosition        string                                 `json:"lastKnownEventPosition,omitempty"`
+	ConnectionCount               int64                                  `json:"connectionCount,omitempty"`
+	TotalInFlightMessages         int64                                  `json:"totalInFlightMessages"`
+	Config                        *PersistentSubscriptionConfig          `json:"config,omitempty"`
+	Connections                   []PersistentSubscriptionConnectionInfo `json:"connections,omitempty"`
+	ReadBufferCount               int64                                  `json:"readBufferCount"`
+	RetryBufferCount              int64                                  `json:"retryBufferCount"`
+	LiveBufferCount               int64                                  `json:"liveBufferCount"`
+	OutstandingMessagesCount      int64                                  `json:"OutstandingMessagesCount"`
+	ParkedMessageCount            int64                                  `json:"parkedMessageCount"`
+	CountSinceLastMeasurement     int64                                  `json:"countSinceLastMeasurement"`
+}
+
 type PersistentSubscriptionInfo struct {
-	EventStreamId            string                                 `json:"eventStreamId"`
-	GroupName                string                                 `json:"groupName"`
-	Status                   string                                 `json:"status"`
-	AverageItemsPerSecond    float64                                `json:"averageItemsPerSecond"`
-	TotalItemsProcessed      int64                                  `json:"totalItemsProcessed"`
-	LastProcessedEventNumber int64                                  `json:"lastProcessedEventNumber"`
-	LastKnownEventNumber     int64                                  `json:"lastKnownEventNumber"`
-	ConnectionCount          int64                                  `json:"connectionCount,omitempty"`
-	TotalInFlightMessages    int64                                  `json:"totalInFlightMessages"`
-	Config                   *PersistentSubscriptionConfig          `json:"config,omitempty"`
-	Connections              []PersistentSubscriptionConnectionInfo `json:"connections,omitempty"`
-	ReadBufferCount          int64                                  `json:"readBufferCount"`
-	RetryBufferCount         int64                                  `json:"retryBufferCount"`
-	LiveBufferCount          int64                                  `json:"liveBufferCount"`
-	OutstandingMessagesCount int64                                  `json:"OutstandingMessagesCount"`
-	ParkedMessageCount       int64                                  `json:"parkedMessageCount"`
+	EventSource string
+	GroupName   string
+	Status      string
+	Connections []PersistentSubscriptionConnectionInfo
+	Settings    *SubscriptionSettings
+	Stats       *PersistentSubscriptionStats
+}
+
+type PersistentSubscriptionStats struct {
+	AveragePerSecond              int64
+	TotalItems                    int64
+	CountSinceLastMeasurement     int64
+	LastCheckpointedEventRevision interface{}
+	LastKnownEventRevision        interface{}
+	ReadBufferCount               int64
+	LiveBufferCount               int64
+	RetryBufferCount              int64
+	TotalInFlightMessages         int64
+	OutstandingMessagesCount      int64
+	ParkedMessagesCount           int64
 }
 
 type PersistentSubscriptionConfig struct {
 	ResolveLinkTos       bool   `json:"resolveLinktos"`
 	StartFrom            int64  `json:"startFrom"`
+	StartPosition        string `json:"startPosition,omitempty"`
 	MessageTimeout       int64  `json:"messageTimeoutMilliseconds"`
 	ExtraStatistics      bool   `json:"extraStatistics"`
 	MaxRetryCount        int64  `json:"maxRetryCount"`

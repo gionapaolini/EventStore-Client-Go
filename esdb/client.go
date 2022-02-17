@@ -643,20 +643,20 @@ func (client *Client) replayParkedMessages(ctx context.Context, streamName strin
 	return client.httpReplayParkedMessages(streamName, groupName, options)
 }
 
-func (client *Client) ListAllPersistentSubscriptions(ctx context.Context, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+func (client *Client) ListAllPersistentSubscriptions(ctx context.Context, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfoHttpJson, error) {
 	return client.listPersistentSubscriptionsInternal(ctx, nil, options)
 }
 
-func (client *Client) ListPersistentSubscriptionsForStream(ctx context.Context, streamName string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+func (client *Client) ListPersistentSubscriptionsForStream(ctx context.Context, streamName string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfoHttpJson, error) {
 	return client.listPersistentSubscriptionsInternal(ctx, &streamName, options)
 }
 
-func (client *Client) ListPersistentSubscriptionsToAll(ctx context.Context, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+func (client *Client) ListPersistentSubscriptionsToAll(ctx context.Context, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfoHttpJson, error) {
 	streamName := "$all"
 	return client.listPersistentSubscriptionsInternal(ctx, &streamName, options)
 }
 
-func (client *Client) listPersistentSubscriptionsInternal(ctx context.Context, streamName *string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfo, error) {
+func (client *Client) listPersistentSubscriptionsInternal(ctx context.Context, streamName *string, options ListPersistentSubscriptionsOptions) ([]PersistentSubscriptionInfoHttpJson, error) {
 	handle, err := client.grpcClient.getConnectionHandle()
 	if err != nil {
 		return nil, err
@@ -678,14 +678,14 @@ func (client *Client) listPersistentSubscriptionsInternal(ctx context.Context, s
 	return client.httpListAllPersistentSubscriptions(options)
 }
 
-func (client *Client) GetPersistentSubscriptionInfo(ctx context.Context, streamName string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfo, error) {
+func (client *Client) GetPersistentSubscriptionInfo(ctx context.Context, streamName string, groupName string, options GetPersistentSubscriptionOptions) (*PersistentSubscriptionInfoHttpJson, error) {
 	body, err := client.httpExecute("GET", fmt.Sprintf("/subscriptions/%s/%s/info", streamName, groupName), options.Authenticated, nil)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var info PersistentSubscriptionInfo
+	var info PersistentSubscriptionInfoHttpJson
 
 	err = json.Unmarshal(body, &info)
 
